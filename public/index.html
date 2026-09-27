@@ -95,6 +95,15 @@
       </div>
       <ol id="citationList" class="citation-list"></ol>
     </section>
+
+    <section class="card">
+      <h2 id="reviewTitle">人工复核与交付 <span class="hint">（按原稿区间列出当前最终映射的全部替换段，逐条确认；规则、框选、例外、裁决或人物合并变化后清单自动重建：完全相同的替换保留确认，新增或输出变化的回到待复核，消失的移除。全部替换通过且巡检无「仍泄漏」时方可下载交付稿）</span></h2>
+      <div class="review-bar">
+        <span id="reviewStats" class="review-stats">未通过 0 ｜ 仍泄漏 0</span>
+        <button id="btnDownloadDelivery" class="btn btn-primary" disabled>下载交付稿（UTF-8 TXT）</button>
+      </div>
+      <ol id="reviewList" class="review-list"></ol>
+    </section>
   </main>
 
   <!-- 框选后弹出的指派面板 -->

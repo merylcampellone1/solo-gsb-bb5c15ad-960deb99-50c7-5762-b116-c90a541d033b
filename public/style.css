@@ -542,6 +542,66 @@ body {
 }
 .citation-del:hover { background: #f0f3f6; border-color: #cf222e; color: #cf222e; }
 
+/* 人工复核与交付 */
+.review-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.review-stats { font-size: 12.5px; color: #4a5568; }
+.review-bar .btn { margin-left: auto; }
+.review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.review-item {
+  border: 1px solid #e1e6ec;
+  border-left: 3px solid #d4a72c;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  background: #fbfcfe;
+}
+.review-item.review-approved { border-left-color: #1a7f37; }
+.review-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.review-idx {
+  flex: none;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff4e0;
+  color: #9a6700;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.review-approved .review-idx { background: #e6f4ea; color: #1a7f37; }
+.review-frag {
+  font-weight: 600;
+  background: #fff8e0;
+  border-radius: 4px;
+  padding: 1px 6px;
+  cursor: pointer;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-frag:hover { background: #ffefc0; }
+.review-arrow { color: #8a94a0; }
+.review-code { font-weight: 600; color: #1a5fb4; }
+.review-src { font-size: 11px; border-radius: 4px; padding: 0 5px; background: #f0f3f6; }
+.review-status { font-size: 11.5px; font-weight: 600; }
+.review-pending .review-status { color: #9a6700; }
+.review-approved .review-status { color: #1a7f37; }
+.review-meta { margin-top: 4px; margin-left: 30px; font-size: 11.5px; color: #8a94a0; }
+.review-empty { font-size: 12px; color: #a0a8b0; list-style: none; }
+.review-confirm { flex: none; margin-left: auto; }
+
 .toast {
   position: fixed;
   left: 50%;
