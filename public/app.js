@@ -13,6 +13,11 @@
  * 标记例外、恢复匿名、添加/删除/合并人物、框选、批量同文指派、共享称呼裁决均进入
  * 同一个撤销栈；合并人物为原子操作：一次入栈，撤销时按原 ID、列表位置、称呼与全部
  * 关联区间（连同裁决）精确恢复；批量同文指派同样整批一条记录。
+ *
+ * 人工复核：复核清单以当前最终映射中的替换段为准，确认记录绑定原稿半开区间、
+ * 人物 ID 与实际代号文本；任何引起重渲染的变化后清单自动重建（完全相同的替换保留
+ * 确认，新增或输出变化的回到待复核，消失的移除）；全部通过且巡检无仍泄漏项时
+ * 方可下载交付稿（当前匿名预览的 UTF-8 TXT）。
  */
 (function () {
   'use strict';
@@ -30,7 +35,9 @@
     candidates: [],    // 敏感信息巡检候选（随原稿一次性离线扫描，detectSensitive 结果）
     inspect: [],       // 候选依据最新映射判定后的结果（每次渲染重算，含 cid/status/leakRanges）
     inspectFilter: 'all', // 巡检侧栏状态筛选：all / leaking / kept / anonymized
-    citations: []      // 引文：{ id, start, end } 原稿非空半开区间（按添加顺序），引文正文每次渲染重算
+    citations: [],     // 引文：{ id, start, end } 原稿非空半开区间（按添加顺序），引文正文每次渲染重算
+    reviews: {}        // 人工复核确认记录 { [sig]: { start, end, personId, output } }：
+                       // 绑定原稿半开区间、人物 ID 与实际代号文本；仅已通过的替换段有记录
   };
   var personSeq = 1;
   var selSeq = 1;
@@ -57,6 +64,7 @@
   var batchTotal = $('batchTotal'), batchOk = $('batchOk');
   var batchClashSel = $('batchClashSel'), batchClashEx = $('batchClashEx');
   var citationList = $('citationList');
+  var reviewList = $('reviewList'), reviewStats = $('reviewStats');
   var toastEl = $('toast');
 
   // ---------- 工具 ----------
@@ -259,6 +267,7 @@
     state.currentPreview = result.preview;
     state.currentMap = result.map;
     computeInspect(result.map);
+    rebuildReviews();
 
     // 当前仍在预览中生效的例外（未被显式框选完全覆盖）
     var activeExIds = {};
@@ -290,6 +299,7 @@
     renderMapping(result.map);
     renderStats(result.map);
     renderCitations(result.map);
+    renderReview();
 
     $('btnUndo').disabled = state.history.length === 0;
     $('btnCopy').disabled = !state.text;
@@ -788,6 +798,152 @@
     document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 0);
   }
+
+  // ---------- 人工复核 ----------
+  // 复核清单以当前最终映射中的替换段（kind === 'replace'）为准，按原稿区间排序
+  // （map 本身按原稿顺序生成）。确认记录绑定原稿半开区间 [start,end)、人物 ID 与
+  // 实际代号文本（预览输出，如「【受访者A】」）：三者完全相同的替换在清单重建后
+  // 保留确认；新增或输出变化的替换没有记录，回到待复核；已消失的替换其确认记录
+  // 随重建移除。规则、框选、例外、共享称呼裁决、人物合并与撤销等任何变化都会
+  // 触发 render，从而重建清单；重新加载原稿时确认记录整体清空。
+  function reviewSig(start, end, personId, output) {
+    return JSON.stringify([start, end, personId, output]);
+  }
+
+  function currentReviewItems() {
+    return state.currentMap.filter(function (m) { return m.kind === 'replace'; }).map(function (m) {
+      var output = state.currentPreview.slice(m.pStart, m.pEnd);
+      var sig = reviewSig(m.oStart, m.oEnd, m.personId, output);
+      return {
+        sig: sig, mid: m.id, start: m.oStart, end: m.oEnd,
+        personId: m.personId, output: output,
+        explicit: m.explicit, approved: !!state.reviews[sig]
+      };
+    });
+  }
+
+  // 重建清单：移除已消失替换的确认记录（新增 / 输出变化的替换天然无记录，即待复核）
+  function rebuildReviews() {
+    var alive = {};
+    state.currentMap.forEach(function (m) {
+      if (m.kind !== 'replace') return;
+      alive[reviewSig(m.oStart, m.oEnd, m.personId, state.currentPreview.slice(m.pStart, m.pEnd))] = true;
+    });
+    Object.keys(state.reviews).forEach(function (sig) {
+      if (!alive[sig]) delete state.reviews[sig];
+    });
+  }
+
+  function reviewCounts(items) {
+    var pending = 0;
+    items.forEach(function (it) { if (!it.approved) pending++; });
+    var leaking = 0;
+    state.inspect.forEach(function (c) { if (c.status === 'leaking') leaking++; });
+    return { total: items.length, pending: pending, approved: items.length - pending, leaking: leaking };
+  }
+
+  function confirmReview(item) {
+    // 确认记录绑定原稿半开区间、人物 ID 与实际代号文本
+    state.reviews[item.sig] = {
+      start: item.start, end: item.end, personId: item.personId, output: item.output
+    };
+    render();
+    toast('已通过复核：' + state.text.slice(item.start, item.end) + ' → ' + item.output);
+  }
+
+  function renderReview() {
+    var items = currentReviewItems();
+    reviewList.innerHTML = '';
+    if (!items.length) {
+      var empty = document.createElement('li');
+      empty.className = 'review-empty';
+      empty.textContent = '（当前没有替换段：添加人物称呼或框选片段后在此逐条复核）';
+      reviewList.appendChild(empty);
+    } else {
+      items.forEach(function (it) {
+        var p = personById(it.personId);
+        var li = document.createElement('li');
+        li.className = 'review-item ' + (it.approved ? 'review-approved' : 'review-pending');
+
+        var row = document.createElement('div');
+        row.className = 'review-row';
+        var frag = document.createElement('span');
+        frag.className = 'review-frag';
+        frag.textContent = state.text.slice(it.start, it.end);
+        frag.title = state.text.slice(it.start, it.end);
+        var arrow = document.createElement('span');
+        arrow.className = 'review-arrow';
+        arrow.textContent = '→';
+        var code = document.createElement('span');
+        code.className = 'review-code';
+        code.textContent = it.output;
+        code.title = it.output;
+        var src = document.createElement('span');
+        src.className = 'review-src ' + (it.explicit ? 'src-explicit' : 'src-alias');
+        src.textContent = it.explicit ? '显式框选' : '称呼命中';
+        var st = document.createElement('span');
+        st.className = 'review-status';
+        st.textContent = it.approved ? '已通过' : '待复核';
+        row.appendChild(frag); row.appendChild(arrow); row.appendChild(code);
+        row.appendChild(src); row.appendChild(st);
+        if (!it.approved) {
+          var ok = document.createElement('button');
+          ok.className = 'btn btn-mini review-ok';
+          ok.textContent = '确认';
+          ok.title = '确认该替换段（确认记录绑定原稿区间、人物 ID 与实际代号文本）';
+          ok.addEventListener('click', function (e) {
+            e.stopPropagation();
+            confirmReview(it);
+          });
+          row.appendChild(ok);
+        }
+        li.appendChild(row);
+
+        var meta = document.createElement('div');
+        meta.className = 'review-meta';
+        meta.textContent = '原稿区间 [' + it.start + ', ' + it.end + ') ｜ 人物：' +
+          (p ? p.codename : '（已删除）');
+        li.appendChild(meta);
+
+        // 点击条目（非确认按钮）在原稿 / 预览中定位该替换段
+        li.addEventListener('click', function (e) {
+          if (e.target.closest('button')) return;
+          activate(it.mid, true);
+        });
+        reviewList.appendChild(li);
+      });
+    }
+
+    // 未通过（待复核）与仍泄漏数量实时显示；两者均为 0 时才可下载交付稿
+    var counts = reviewCounts(items);
+    reviewStats.textContent = '替换 ' + counts.total + ' 段 ｜ 待复核 ' + counts.pending +
+      ' ｜ 已通过 ' + counts.approved + ' ｜ 仍泄漏 ' + counts.leaking;
+    var btn = $('btnDownloadDelivery');
+    btn.disabled = !(counts.pending === 0 && counts.leaking === 0);
+    btn.title = btn.disabled
+      ? '仍有 ' + counts.pending + ' 条替换待复核、' + counts.leaking +
+        ' 处敏感信息仍泄漏；全部通过且无泄漏后可下载'
+      : '按当前匿名预览生成 UTF-8 TXT 交付稿';
+  }
+
+  // 交付稿：仅在「全部替换段已通过复核 且 巡检无仍泄漏项」时可用，
+  // 内容为当前匿名预览，UTF-8 TXT 经浏览器本地 Blob 下载
+  function downloadDelivery() {
+    var counts = reviewCounts(currentReviewItems());
+    if (counts.pending || counts.leaking) return;
+    var blob = new Blob([state.currentPreview], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'delivery.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+    toast('交付稿已下载（UTF-8 TXT，按当前匿名预览生成）');
+  }
+
+  $('btnDownloadDelivery').addEventListener('click', downloadDelivery);
 
   // ---------- 双向高亮 ----------
   function clearActive() {
@@ -1349,6 +1505,7 @@
     state.rulings = {};
     state.history = [];
     state.citations = []; // 重新加载原稿时清空引文
+    state.reviews = {};   // 重新加载原稿时清空全部复核确认
     state.candidates = Anonymizer.detectSensitive(text); // 离线一次性扫描，随规则变化只重判级
     state.inspect = [];
     state.inspectFilter = 'all';
@@ -1366,7 +1523,7 @@
 
   $('btnResetText').addEventListener('click', function () {
     if ((state.persons.length || state.selections.length || state.exceptions.length || state.citations.length) &&
-        !window.confirm('重新粘贴将清空当前所有人物规则、框选、例外与引文，确定继续？')) return;
+        !window.confirm('重新粘贴将清空当前所有人物规则、框选、例外、引文与复核确认，确定继续？')) return;
     textInput.value = state.text;
     editorSection.classList.add('hidden');
     inputSection.classList.remove('hidden');
@@ -1380,6 +1537,7 @@
     state.rulings = {};
     state.history = [];
     state.citations = []; // 重新加载原稿时清空引文
+    state.reviews = {};   // 重新加载原稿时清空全部复核确认
     state.candidates = [];
     state.inspect = [];
     state.inspectFilter = 'all';

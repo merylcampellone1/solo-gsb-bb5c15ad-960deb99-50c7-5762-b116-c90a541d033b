@@ -95,6 +95,17 @@
       </div>
       <ol id="citationList" class="citation-list"></ol>
     </section>
+
+    <section class="card">
+      <h2 id="reviewTitle">人工复核 <span class="hint">（按原稿区间列出当前最终映射中的替换段：原文、代号、来源与状态；逐条「确认」后，规则 / 框选 / 例外 / 共享称呼裁决 / 人物合并等变化会重建清单——完全相同的替换保留确认，新增或输出变化的回到待复核，消失的移除；重新加载原稿清空全部确认）</span></h2>
+      <div class="review-bar">
+        <span id="reviewStats" class="review-stats">替换 0 段 ｜ 待复核 0 ｜ 已通过 0 ｜ 仍泄漏 0</span>
+        <button id="btnDownloadDelivery" class="btn btn-primary" disabled title="全部替换段通过复核且巡检无仍泄漏项后可用">下载交付稿（UTF-8 TXT）</button>
+      </div>
+      <ul id="reviewList" class="review-list">
+        <li class="review-empty">（当前没有替换段：添加人物称呼或框选片段后在此逐条复核）</li>
+      </ul>
+    </section>
   </main>
 
   <!-- 框选后弹出的指派面板 -->
